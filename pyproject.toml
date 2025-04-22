@@ -1,0 +1,29 @@
+[project]
+name = "animcl"
+version = "0.1.0"
+description = "Default template for PDM package"
+authors = [
+    { name = "Nikita Makarevich", email = "nikita_makarevich@yahoo.com" },
+]
+dependencies = ["numpy>=2.2.5", "pandas>=2.2.3", "jupyter>=1.1.1"]
+requires-python = "==3.12.*"
+readme = "README.md"
+license = { text = "MIT" }
+
+
+[project.optional-dependencies]
+cuda = [
+    "torch>=2.7.0",
+    "torchvision>=0.22.0",
+]
+[tool.pdm]
+distribution = false
+
+[[tool.pdm.source]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu118"
+include_packages = ["torch", "torchvision"]
+[tool.pdm.dev-dependencies]
+dev = [
+    "-e file:///${PROJECT_ROOT}/#egg=animcl",
+]
