@@ -12,10 +12,7 @@ license = { text = "MIT" }
 
 
 [project.optional-dependencies]
-cuda = [
-    "torch>=2.7.0",
-    "torchvision>=0.22.0",
-]
+cuda = ["torch>=2.7.0", "torchvision>=0.22.0"]
 [tool.pdm]
 distribution = false
 
@@ -23,7 +20,7 @@ distribution = false
 name = "pytorch-cuda"
 url = "https://download.pytorch.org/whl/cu118"
 include_packages = ["torch", "torchvision"]
+
+
 [tool.pdm.dev-dependencies]
-dev = [
-    "-e file:///${PROJECT_ROOT}/#egg=animcl",
-]
+dev = ["-e file:///${PROJECT_ROOT}/#egg=animcl"]
