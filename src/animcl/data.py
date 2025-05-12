@@ -1,10 +1,13 @@
 from enum import Enum
 from pathlib import Path
+from typing import Any
+
 import numpy as np
-import torch
-from torch.utils.data import Dataset
-from torchvision.io import read_image
 import pandas as pd
+from sklearn.model_selection import train_test_split
+import torch
+from torchvision.io import decode_image
+from torch.utils.data import Dataset
 
 
 class EnglishLabel(str, Enum):
@@ -49,43 +52,52 @@ def translate_labels(labels: list[EnglishLabel]) -> list[ItalianLabel]:
     return [translate[label] for label in labels]
 
 
-class AnimalsDataset(Dataset):
-    def __init__(self, data_dir: str | Path, english_labels: list[EnglishLabel]):
-        self.data_dir = Path(data_dir)
-        italian_labels = translate_labels(english_labels)
-        self.num_labels = len(italian_labels)
+def build_dataframes(
+    data_dir: str | Path, english_labels: list[EnglishLabel], test_size: float = 0.2
+) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    data_dir = Path(data_dir)
+    if not data_dir.exists() or not data_dir.is_dir():
+        raise ValueError(f"Invalid data directory: {data_dir}")
 
-        data = []
-        for label_idx, italian_label in enumerate(italian_labels):
-            label_dir = self.data_dir / italian_label.value
-            for fpath in label_dir.glob("*"):
-                if fpath.is_file():
-                    data.append(
-                        {
-                            "italian_label": italian_label,
-                            "label_idx": label_idx,
-                            "path": str(fpath),
-                        }
-                    )
-        self.data_df = pd.DataFrame(data)
+    italian_labels = translate_labels(english_labels)
+    num_labels = len(italian_labels)
+
+    data = []
+    for label_idx, italian_label in enumerate(italian_labels):
+        label_dir = data_dir / italian_label.value
+        for fpath in label_dir.glob("*"):
+            if fpath.is_file():
+                data.append(
+                    {
+                        "italian_label": italian_label,
+                        "english_label": english_labels[label_idx],
+                        "label_idx": label_idx,
+                        "path": str(fpath),
+                    }
+                )
+    data_df = pd.DataFrame(data)
+
+    train_df, test_df = train_test_split(data_df, test_size=test_size)
+    return train_df, test_df, num_labels
+
+
+class AnimalsDataset(Dataset):
+    def __init__(
+        self, data_df: pd.DataFrame, num_labels: int, transform: Any | None = None
+    ):
+        self.data_df = data_df
+        self.num_labels = num_labels
+        self.transform = transform
 
     def __len__(self) -> int:
         return len(self.data_df)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        img_path = self.data_df.loc[idx, "path"]
-        image = read_image(img_path)
+        entry = self.data_df.iloc[idx]
+        image = decode_image(entry["path"])
+        if self.transform is not None:
+            image = self.transform(image)
+
         labels = np.zeros(self.num_labels, dtype=int)
-        labels[self.data_df.loc[idx, "label_idx"]] = 1
+        labels[entry["label_idx"]] = 1
         return image, torch.tensor(labels)
-
-
-if __name__ == "__main__":
-    dataset = AnimalsDataset(
-        Path(__file__).parent.parent.parent / "data" / "raw-img",
-        [EnglishLabel.DOG, EnglishLabel.CAT],
-    )
-    print(len(dataset))
-    for i in range(5):
-        image, labels = dataset[i]
-        print(f"Image shape: {image.shape}, Labels: {labels}")
