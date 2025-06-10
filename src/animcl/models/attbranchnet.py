@@ -113,9 +113,17 @@ class ResNet(nn.Module):
         self,
         block: type[BasicBlock | Bottleneck],
         layers: list[int],
+        attn_conv_channels: tuple[int, int] | None = None,
         num_classes: int = 1000,
+        default_initialization: bool = True,
+        attn_residual_connection: bool = True,
     ):
         super().__init__()
+        self.attn_residual_connection = attn_residual_connection
+
+        if attn_conv_channels is None:
+            attn_conv_channels = (num_classes, num_classes)
+
         self.inplanes: int = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
@@ -130,13 +138,23 @@ class ResNet(nn.Module):
         )
         self.bn_att = nn.BatchNorm2d(512 * block.expansion)
         self.att_conv = nn.Conv2d(
-            512 * block.expansion, num_classes, kernel_size=1, padding=0, bias=False
+            512 * block.expansion,
+            attn_conv_channels[0],
+            kernel_size=1,
+            padding=0,
+            bias=False,
         )
-        self.bn_att2 = nn.BatchNorm2d(num_classes)
+        self.bn_att2 = nn.BatchNorm2d(attn_conv_channels[0])
         self.att_conv2 = nn.Conv2d(
-            num_classes, num_classes, kernel_size=1, padding=0, bias=False
+            attn_conv_channels[0],
+            attn_conv_channels[1],
+            kernel_size=1,
+            padding=0,
+            bias=False,
         )
-        self.att_conv3 = nn.Conv2d(num_classes, 1, kernel_size=3, padding=1, bias=False)
+        self.att_conv3 = nn.Conv2d(
+            attn_conv_channels[1], 1, kernel_size=3, padding=1, bias=False
+        )
         self.bn_att3 = nn.BatchNorm2d(1)
         self.att_gap = nn.AvgPool2d(14)
         self.sigmoid = nn.Sigmoid()
@@ -145,12 +163,15 @@ class ResNet(nn.Module):
         self.avgpool = nn.AvgPool2d(7, stride=1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
+        if default_initialization:
+            for m in self.modules():
+                if isinstance(m, nn.Conv2d):
+                    nn.init.kaiming_normal_(
+                        m.weight, mode="fan_out", nonlinearity="relu"
+                    )
+                elif isinstance(m, nn.BatchNorm2d):
+                    nn.init.constant_(m.weight, 1)
+                    nn.init.constant_(m.bias, 0)
 
     def _make_layer(
         self,
@@ -214,7 +235,8 @@ class ResNet(nn.Module):
 
         # Attention mechanism
         rx = x * self.att
-        rx = rx + x
+        if self.attn_residual_connection:
+            rx = rx + x
         per = rx
 
         # Perception branch
